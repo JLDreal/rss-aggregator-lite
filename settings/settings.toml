@@ -1,0 +1,6 @@
+[Feed]
+feeds = ["https://lobste.rs/rss"]
+
+[Settings]
+is_offline = false
+download = "all"
