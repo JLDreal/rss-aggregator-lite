@@ -1,5 +1,5 @@
 [Feed]
-feeds = ["https://lobste.rs/rss"]
+feeds = ["https://lobste.rs/rss","https://www.volksverpetzer.de/rss","https://doingfedtime.com/rss"]
 
 [Settings]
 is_offline = false
