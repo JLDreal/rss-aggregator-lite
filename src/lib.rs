@@ -1,9 +1,13 @@
 use rss::Channel;
+use std::iter;
 use std::{error::Error, io::Write, io::BufReader};
 use std::fs::File;
+use regex::Regex;
+
 pub struct RssController {
     pub channels: Vec<Channel>,
     pub feed_urls: Vec<String>,
+    pub online: bool
 
 }
 
@@ -12,6 +16,7 @@ impl RssController {
         Self {
             channels: Vec::new(),
             feed_urls: Vec::new(),
+            online: false
         }
     }
 
@@ -26,13 +31,26 @@ impl RssController {
         }
     }
 
+    pub async fn get_feeds(&self){
+        if self.online {
+            self.download_feed(self.feed_urls.get(0).unwrap()).await;
+        }
+        else{
+            self.load_feed(format!("{}.xml",&self.get_file_name(self.feed_urls.get(0).unwrap())).as_str()).await;
+        }
+    }
+    fn get_file_name(&self, url: &str) -> String {
+       let regex = Regex::new(r"\/\/(.*)\/").unwrap();
+       regex.captures(url).expect("no url base").get(0).unwrap().as_str().to_string().replace(".", "_").replace("/", "")
+
+    } 
     async fn download_feed(&self, url: &str) -> Result<Channel, Box<dyn Error>> {
         let content = reqwest::get(url)//  
             .await?
             .bytes()
             .await?;
         let channel = Channel::read_from(&content[..])?;
-        let mut file = File::create(format!("{}.xml",channel.title)).expect("Unable to create file"); 
+        let mut file = File::create(format!("{}.xml",self.get_file_name(url))).expect("Unable to create file"); 
         file.write(&content)?;
         
     
@@ -55,6 +73,10 @@ impl RssController {
     pub fn get_channels(&self) -> Vec<&Channel> {
         self.channels.iter().collect()
     }
+
+
+
+    
 }
 
 
