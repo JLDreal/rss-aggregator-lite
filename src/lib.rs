@@ -1,12 +1,10 @@
 use regex::Regex;
 use rss::Channel;
+use serde_derive::Deserialize;
 use std::fs::{self, File};
 use std::iter;
 use std::{error::Error, io::BufReader, io::Write};
 use toml;
-use serde_derive::Deserialize;
-
-
 
 pub struct RssController {
     pub channels: Vec<Channel>,
@@ -30,6 +28,7 @@ impl RssController {
     }
 
     pub async fn get_feeds(&mut self) {
+        self.channels = Vec::new();
         for i in 0..self.feed_urls.len() {
             self.get_feed(i).await;
         }
@@ -50,8 +49,7 @@ impl RssController {
                 Ok(res) => self.channels.push(res),
                 Err(_) => println!("[!] No local version."),
             };
-        }
-        else {
+        } else {
             match self.download_feed(self.feed_urls.get(index).unwrap()).await {
                 Ok(res) => self.channels.push(res),
                 Err(_) => match self
@@ -69,11 +67,10 @@ impl RssController {
                 },
             }
         }
-        
     }
 
     fn get_file_name(&self, url: &str) -> String {
-        let regex = Regex::new(r"\/\/(.*)\/").unwrap();
+        let regex = Regex::new(r"\/\/(.*\..*)\/").unwrap();
         regex
             .captures(url)
             .expect("no url base")
@@ -116,45 +113,47 @@ impl RssController {
     }
 }
 
-
 #[derive(Deserialize)]
 struct Settings {
-    is_offline : bool,
+    is_offline: bool,
     download_behavior: String,
 }
 
 #[derive(Deserialize)]
 struct Feed {
-    feeds: Vec<String>
+    feeds: Vec<String>,
 }
 
 #[derive(Deserialize)]
 struct Data {
     pub settings: Settings,
-    pub feed: Feed
+    pub feed: Feed,
 }
 
 pub struct SettingsController {
     pub rss_controller: RssController,
-    pub settings: Settings
+    pub settings: Settings,
 }
 
 impl SettingsController {
-    pub fn new() -> Self{
+    pub fn new() -> Self {
         Self {
-           rss_controller: RssController::new(),
-           settings: Settings { is_offline: false, download_behavior: "".to_string() }
+            rss_controller: RssController::new(),
+            settings: Settings {
+                is_offline: false,
+                download_behavior: "".to_string(),
+            },
         }
     }
-    pub async fn load(&mut self) -> Result<(), Box<dyn std::error::Error> > {
+    pub async fn load(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let content = fs::read_to_string("settings/settings.toml")?;
-        let data: Data  = toml::from_str(&content)?;
-        
+        let data: Data = toml::from_str(&content)?;
+
         self.settings = data.settings;
         self.rss_controller.feed_urls = data.feed.feeds;
         self.rss_controller.online = self.settings.is_offline.clone();
         self.rss_controller.get_feeds().await;
-        
+
         Ok(())
     }
 }
