@@ -1,12 +1,12 @@
-use core::RssController;
+use core::{RssController, SettingsController};
 
 #[tokio::main]
 async fn main() {
     println!("Hello, world!");
-    let mut c = RssController::new();
-    c.add_feed("https://lobste.rs/rss".to_string()).await;
-    c.add_feed("https://www.tagesschau.de/infoservices/alle-meldungen-100~rss2.xml".to_string())
-        .await;
-    c.get_feeds().await;
-    c.get_feeds().await;
+    let mut settings = SettingsController::new();
+    settings.load().await.unwrap();
+    settings.rss_controller.get_feeds().await;
+    settings.rss_controller.channels.iter()
+        .for_each(|x| println!("{}",x.title));
+
 }
