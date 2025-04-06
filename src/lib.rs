@@ -38,11 +38,9 @@ impl RssController {
         if self.online {
             match self
                 .load_feed(
-                    format!(
-                        "{}.xml",
-                        &self.get_file_name(self.feed_urls.get(index).unwrap())
-                    )
-                    .as_str(),
+                    &self
+                        .get_file_name(self.feed_urls.get(index).unwrap())
+                        .as_str(),
                 )
                 .await
             {
@@ -54,11 +52,9 @@ impl RssController {
                 Ok(res) => self.channels.push(res),
                 Err(_) => match self
                     .load_feed(
-                        format!(
-                            "{}.xml",
-                            &self.get_file_name(self.feed_urls.get(index).unwrap())
-                        )
-                        .as_str(),
+                        &self
+                            .get_file_name(self.feed_urls.get(index).unwrap())
+                            .as_str(),
                     )
                     .await
                 {
@@ -80,6 +76,7 @@ impl RssController {
             .to_string()
             .replace(".", "_")
             .replace("/", "")
+            + ".xml"
     }
 
     async fn download_feed(&self, url: &str) -> Result<Channel, Box<dyn Error>> {
