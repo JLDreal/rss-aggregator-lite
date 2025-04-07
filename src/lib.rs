@@ -85,7 +85,7 @@ impl RssController {
             .bytes()
             .await?;
         let channel = Channel::read_from(&content[..])?;
-        let mut file = File::create(format!("{}.xml", self.get_file_name(url)))
+        let mut file = File::create(self.get_file_name(url))
             .expect("Unable to create file");
         file.write(&content)?;
 
