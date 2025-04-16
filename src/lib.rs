@@ -1,10 +1,11 @@
 use regex::Regex;
 use rss::Channel;
 use serde_derive::Deserialize;
-use std::fs::{self, File};
+use std::fs::{self, create_dir, File};
 use std::iter;
 use std::{error::Error, io::BufReader, io::Write};
 use toml;
+use std::path::PathBuf;
 
 pub struct RssController {
     pub channels: Vec<Channel>,
@@ -35,6 +36,7 @@ impl RssController {
     }
 
     pub async fn get_feed(&mut self, index: usize) {
+        let mut tmp_channels: Vec<Channel> = Vec::new();
         if self.online {
             match self
                 .load_feed(
@@ -58,10 +60,12 @@ impl RssController {
                     )
                     .await
                 {
-                    Ok(res) => self.channels.push(res),
+                    Ok(res) => tmp_channels.push(res),
                     Err(_) => println!("[!] No internet and no local version."),
                 },
-            }
+            };
+            
+            
         }
     }
 
@@ -69,14 +73,28 @@ impl RssController {
         let regex = Regex::new(r"\/\/(.*\..*)\/").unwrap();
         regex
             .captures(url)
-            .expect("no url base")
-            .get(0)
+            .expect("file wrong idk.")
+            .get(1)
             .unwrap()
             .as_str()
             .to_string()
             .replace(".", "_")
             .replace("/", "")
             + ".xml"
+    }
+    fn get_image_name(&self, url: &str) -> String {
+        // println!("{}",url);
+        let regex = Regex::new(r"//.*\..*/(.*)").unwrap();
+        let reg = regex
+            .captures(url)
+            .expect("no url base")
+            .get(1)
+            .unwrap()
+            .as_str()
+            .to_string()
+            .replace("/", "");
+        println!("{}",reg);
+        reg
     }
 
     async fn download_feed(&self, url: &str) -> Result<Channel, Box<dyn Error>> {
@@ -85,11 +103,53 @@ impl RssController {
             .bytes()
             .await?;
         let channel = Channel::read_from(&content[..])?;
+        let channel = self.download_content(channel).await.unwrap();
+
         let mut file = File::create(self.get_file_name(url))
             .expect("Unable to create file");
         file.write(&content)?;
+        
 
         Ok(channel)
+    }
+
+    async fn download_content(&self, mut channel: Channel) -> Result<Channel, Box<dyn Error>> {
+        // Create a directory for the channel
+        let channel_dir = PathBuf::from(&channel.title);
+        create_dir(&channel_dir).is_err();
+
+        let regex = Regex::new(r#"<img[^>]+src="([^">]+)""#)?;
+
+        for item in &mut channel.items {
+            // Ensure item.content is a String
+            let content = match item.content.as_mut(){
+                Some(res) => res,
+                None => break
+            };
+
+            // Find all captures in the item content
+            let images = regex.captures_iter(content).collect::<Vec<_>>();
+
+            for capture in images {
+                // Get the URL from the capture group
+                if let Some(url) = capture.get(1) {
+                    let url = url.as_str();
+
+                    // Download the content
+                    let content = reqwest::get(url).await?.bytes().await?;
+
+                    // Create a file to save the content
+                    let file_name = self.get_image_name(url);
+                    let file_path = channel_dir.join(&file_name);
+                    let mut file = File::create(&file_path)?;
+                    file.write_all(&content)?;
+
+                    
+                }
+            }
+        }
+
+        Ok(channel) // Return the channel after processing
     }
 
     async fn load_feed(&self, filename: &str) -> Result<Channel, Box<dyn Error>> {

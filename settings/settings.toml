@@ -1,7 +1,7 @@
 
 
 [settings]
-is_offline = true
+is_offline = false
 download_behavior = "all"
 
 [feed]
