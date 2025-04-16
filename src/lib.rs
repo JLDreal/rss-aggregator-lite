@@ -2,11 +2,10 @@ use infer::Infer;
 use regex::Regex;
 use rss::Channel;
 use serde_derive::Deserialize;
-use std::fs::{self, create_dir, File};
-use std::iter;
+use std::fs::{self, File, create_dir};
+use std::path::PathBuf;
 use std::{error::Error, io::BufReader, io::Write};
 use toml;
-use std::path::PathBuf;
 
 pub struct RssController {
     pub channels: Vec<Channel>,
@@ -65,8 +64,6 @@ impl RssController {
                     Err(_) => println!("[!] No internet and no local version."),
                 },
             };
-            
-            
         }
     }
 
@@ -83,9 +80,7 @@ impl RssController {
             .replace("/", "")
             + ".xml"
     }
-    fn get_image_name(&self, url: &str, filetype : &str) -> String {
-        
-        
+    fn get_image_name(&self, url: &str, filetype: &str) -> String {
         let regex = Regex::new(r"//.*\..*/([[:alnum:]_-]*)\.*").unwrap();
         let mut reg = regex
             .captures(url)
@@ -96,9 +91,7 @@ impl RssController {
             .to_string()
             .replace("/", "");
 
-        reg = format!("{}.{}",reg,filetype);
-        
-        reg
+        format!("{}.{}", reg, filetype)
     }
 
     async fn download_feed(&self, url: &str) -> Result<Channel, Box<dyn Error>> {
@@ -109,10 +102,8 @@ impl RssController {
         let channel = Channel::read_from(&content[..])?;
         let channel = self.download_content(channel).await.unwrap();
 
-        let mut file = File::create(self.get_file_name(url))
-            .expect("Unable to create file");
+        let mut file = File::create(self.get_file_name(url)).expect("Unable to create file");
         channel.write_to(file)?;
-        
 
         Ok(channel)
     }
@@ -120,21 +111,20 @@ impl RssController {
     async fn download_content(&self, mut channel: Channel) -> Result<Channel, Box<dyn Error>> {
         // Create a directory for the channel
         let channel_dir = PathBuf::from(&channel.title);
-        create_dir(&channel_dir).is_err();
+        let _ = create_dir(&channel_dir).is_err();
         let infer = Infer::new();
 
         let regex = Regex::new(r#"<img[^>]+src="([^">]+)""#)?;
 
         for item in &mut channel.items {
             // Ensure item.content is a String
-            let content = match item.content.clone(){
+            let content = match item.content.clone() {
                 Some(res) => res,
-                None => break
+                None => break,
             };
 
             // Find all captures in the item content
             let images = regex.captures_iter(&content).collect::<Vec<_>>();
-            
 
             for capture in images {
                 // Get the URL from the capture group
@@ -144,8 +134,9 @@ impl RssController {
                     // Download the content
                     let image_data = reqwest::get(url).await?.bytes().await?;
 
-                    // getting file type 
-                    let extension = infer.get(&image_data)
+                    // getting file type
+                    let extension = infer
+                        .get(&image_data)
                         .map(|kind| kind.extension())
                         .unwrap_or("jpg");
 
@@ -154,12 +145,16 @@ impl RssController {
                     let file_path = channel_dir.join(&file_name);
                     let mut file = File::create(&file_path)?;
                     file.write_all(&image_data)?;
-                    println!("{}",url);
-                    println!("{:?}",file_path);
-                    
-                    item.content = Some(item.content.as_mut().unwrap().replace(url, file_path.to_str().unwrap()).to_string());
+                    println!("{}", url);
+                    println!("{:?}", file_path);
 
-                    
+                    item.content = Some(
+                        item.content
+                            .as_mut()
+                            .unwrap()
+                            .replace(url, file_path.to_str().unwrap())
+                            .to_string(),
+                    );
                 }
             }
         }
