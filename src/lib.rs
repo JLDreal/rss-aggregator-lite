@@ -1,3 +1,4 @@
+use infer::Infer;
 use regex::Regex;
 use rss::Channel;
 use serde_derive::Deserialize;
@@ -82,10 +83,11 @@ impl RssController {
             .replace("/", "")
             + ".xml"
     }
-    fn get_image_name(&self, url: &str) -> String {
-        // println!("{}",url);
-        let regex = Regex::new(r"//.*\..*/(.*)").unwrap();
-        let reg = regex
+    fn get_image_name(&self, url: &str, filetype : &str) -> String {
+        
+        
+        let regex = Regex::new(r"//.*\..*/([[:alnum:]_-]*)\.*").unwrap();
+        let mut reg = regex
             .captures(url)
             .expect("no url base")
             .get(1)
@@ -93,7 +95,9 @@ impl RssController {
             .as_str()
             .to_string()
             .replace("/", "");
-        println!("{}",reg);
+
+        reg = format!("{}.{}",reg,filetype);
+        
         reg
     }
 
@@ -107,7 +111,7 @@ impl RssController {
 
         let mut file = File::create(self.get_file_name(url))
             .expect("Unable to create file");
-        file.write(&content)?;
+        channel.write_to(file)?;
         
 
         Ok(channel)
@@ -117,18 +121,20 @@ impl RssController {
         // Create a directory for the channel
         let channel_dir = PathBuf::from(&channel.title);
         create_dir(&channel_dir).is_err();
+        let infer = Infer::new();
 
         let regex = Regex::new(r#"<img[^>]+src="([^">]+)""#)?;
 
         for item in &mut channel.items {
             // Ensure item.content is a String
-            let content = match item.content.as_mut(){
+            let content = match item.content.clone(){
                 Some(res) => res,
                 None => break
             };
 
             // Find all captures in the item content
-            let images = regex.captures_iter(content).collect::<Vec<_>>();
+            let images = regex.captures_iter(&content).collect::<Vec<_>>();
+            
 
             for capture in images {
                 // Get the URL from the capture group
@@ -136,13 +142,22 @@ impl RssController {
                     let url = url.as_str();
 
                     // Download the content
-                    let content = reqwest::get(url).await?.bytes().await?;
+                    let image_data = reqwest::get(url).await?.bytes().await?;
+
+                    // getting file type 
+                    let extension = infer.get(&image_data)
+                        .map(|kind| kind.extension())
+                        .unwrap_or("jpg");
 
                     // Create a file to save the content
-                    let file_name = self.get_image_name(url);
+                    let file_name = self.get_image_name(url, extension);
                     let file_path = channel_dir.join(&file_name);
                     let mut file = File::create(&file_path)?;
-                    file.write_all(&content)?;
+                    file.write_all(&image_data)?;
+                    println!("{}",url);
+                    println!("{:?}",file_path);
+                    
+                    item.content = Some(item.content.as_mut().unwrap().replace(url, file_path.to_str().unwrap()).to_string());
 
                     
                 }
