@@ -1,8 +1,9 @@
+use infer::Infer;
 use regex::Regex;
 use rss::{Channel, Item};
 use serde_derive::Deserialize;
-use std::fs::{self, create_dir, File};
-use std::iter;
+use std::fs::{self, File, create_dir};
+use std::path::PathBuf;
 use std::{error::Error, io::BufReader, io::Write};
 use toml;
 use std::path::{Path, PathBuf};
@@ -64,8 +65,6 @@ impl RssController {
                     Err(_) => println!("[!] No internet and no local version."),
                 },
             };
-            
-            
         }
     }
 
@@ -82,10 +81,9 @@ impl RssController {
             .replace("/", "")
             + ".xml"
     }
-    fn get_image_name(&self, url: &str) -> String {
-        // println!("{}",url);
-        let regex = Regex::new(r"//.*\..*/(.*)").unwrap();
-        let reg = regex
+    fn get_image_name(&self, url: &str, filetype: &str) -> String {
+        let regex = Regex::new(r"//.*\..*/([[:alnum:]_-]*)\.*").unwrap();
+        let mut reg = regex
             .captures(url)
             .expect("no url base")
             .get(1)
@@ -93,8 +91,8 @@ impl RssController {
             .as_str()
             .to_string()
             .replace("/", "");
-        println!("{}",reg);
-        reg
+
+        format!("{}.{}", reg, filetype)
     }
 
     async fn download_feed(&self, url: &str) -> Result<Channel, Box<dyn Error>> {
@@ -105,10 +103,8 @@ impl RssController {
         let channel = Channel::read_from(&content[..])?;
         let channel = self.download_content(channel).await.unwrap();
 
-        let mut file = File::create(self.get_file_name(url))
-            .expect("Unable to create file");
-        file.write(&content)?;
-        
+        let mut file = File::create(self.get_file_name(url)).expect("Unable to create file");
+        channel.write_to(file)?;
 
         Ok(channel)
     }
