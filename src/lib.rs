@@ -1,12 +1,11 @@
-use infer::Infer;
 use regex::Regex;
 use rss::{Channel, Item};
 use serde_derive::Deserialize;
 use std::fs::{self, File, create_dir};
-use std::path::PathBuf;
+use std::iter;
+use std::path::{Path, PathBuf};
 use std::{error::Error, io::BufReader, io::Write};
 use toml;
-use std::path::{Path, PathBuf};
 
 pub struct RssController {
     pub channels: Vec<Channel>,
@@ -81,9 +80,10 @@ impl RssController {
             .replace("/", "")
             + ".xml"
     }
-    fn get_image_name(&self, url: &str, filetype: &str) -> String {
-        let regex = Regex::new(r"//.*\..*/([[:alnum:]_-]*)\.*").unwrap();
-        let mut reg = regex
+    fn get_image_name(&self, url: &str) -> String {
+        // println!("{}",url);
+        let regex = Regex::new(r"//.*\..*/(.*)").unwrap();
+        let reg = regex
             .captures(url)
             .expect("no url base")
             .get(1)
@@ -91,8 +91,8 @@ impl RssController {
             .as_str()
             .to_string()
             .replace("/", "");
-
-        format!("{}.{}", reg, filetype)
+        println!("{}", reg);
+        reg
     }
 
     async fn download_feed(&self, url: &str) -> Result<Channel, Box<dyn Error>> {
@@ -104,7 +104,7 @@ impl RssController {
         let channel = self.download_content(channel).await.unwrap();
 
         let mut file = File::create(self.get_file_name(url)).expect("Unable to create file");
-        channel.write_to(file)?;
+        file.write(&content)?;
 
         Ok(channel)
     }
@@ -112,9 +112,9 @@ impl RssController {
         let regex = Regex::new(r#"<img[^>]+src="([^">]+)""#)?;
 
         // Ensure item.content is a String
-        let content = match item.content.as_mut(){
+        let content = match item.content.as_mut() {
             Some(res) => res,
-            None => return Err("[!] no title for feed.".into())
+            None => return Err("[!] no title for feed.".into()),
         };
 
         // Find all captures in the item content
@@ -133,19 +133,16 @@ impl RssController {
                 let file_path = dir.join(&file_name);
                 let mut file = File::create(&file_path)?;
                 file.write_all(&content)?;
-
-                
             }
         }
         Ok(())
-    }    
+    }
 
     async fn download_content(&self, mut channel: Channel) -> Result<Channel, Box<dyn Error>> {
         // Create a directory for the channel
         let channel_dir = PathBuf::from(&channel.title);
         create_dir(&channel_dir).is_err();
 
-        
         for item in &mut channel.items {
             self.download_item(item, channel_dir.clone()).await;
         }
