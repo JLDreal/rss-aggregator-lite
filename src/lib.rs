@@ -1,11 +1,11 @@
 use regex::Regex;
-use rss::Channel;
+use rss::{Channel, Item};
 use serde_derive::Deserialize;
 use std::fs::{self, create_dir, File};
 use std::iter;
 use std::{error::Error, io::BufReader, io::Write};
 use toml;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct RssController {
     pub channels: Vec<Channel>,
@@ -112,41 +112,46 @@ impl RssController {
 
         Ok(channel)
     }
+    async fn download_item(&self, item: &mut Item, dir: PathBuf) -> Result<(), Box<dyn Error>> {
+        let regex = Regex::new(r#"<img[^>]+src="([^">]+)""#)?;
+
+        // Ensure item.content is a String
+        let content = match item.content.as_mut(){
+            Some(res) => res,
+            None => return Err("[!] no title for feed.".into())
+        };
+
+        // Find all captures in the item content
+        let images = regex.captures_iter(content).collect::<Vec<_>>();
+
+        for capture in images {
+            // Get the URL from the capture group
+            if let Some(url) = capture.get(1) {
+                let url = url.as_str();
+
+                // Download the content
+                let content = reqwest::get(url).await?.bytes().await?;
+
+                // Create a file to save the content
+                let file_name = self.get_image_name(url);
+                let file_path = dir.join(&file_name);
+                let mut file = File::create(&file_path)?;
+                file.write_all(&content)?;
+
+                
+            }
+        }
+        Ok(())
+    }    
 
     async fn download_content(&self, mut channel: Channel) -> Result<Channel, Box<dyn Error>> {
         // Create a directory for the channel
         let channel_dir = PathBuf::from(&channel.title);
         create_dir(&channel_dir).is_err();
 
-        let regex = Regex::new(r#"<img[^>]+src="([^">]+)""#)?;
-
+        
         for item in &mut channel.items {
-            // Ensure item.content is a String
-            let content = match item.content.as_mut(){
-                Some(res) => res,
-                None => break
-            };
-
-            // Find all captures in the item content
-            let images = regex.captures_iter(content).collect::<Vec<_>>();
-
-            for capture in images {
-                // Get the URL from the capture group
-                if let Some(url) = capture.get(1) {
-                    let url = url.as_str();
-
-                    // Download the content
-                    let content = reqwest::get(url).await?.bytes().await?;
-
-                    // Create a file to save the content
-                    let file_name = self.get_image_name(url);
-                    let file_path = channel_dir.join(&file_name);
-                    let mut file = File::create(&file_path)?;
-                    file.write_all(&content)?;
-
-                    
-                }
-            }
+            self.download_item(item, channel_dir.clone()).await;
         }
 
         Ok(channel) // Return the channel after processing
