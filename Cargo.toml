@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 
 [dependencies]
-tokio = { version = "1.44.1", features = ["full"] }
+tokio = { version = "1.44.2", features = ["full"] }
 rss = "2.0.12"
 reqwest = "0.12.15"
 openssl = { version = "0.10", features = ["vendored"] }
