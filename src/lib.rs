@@ -41,7 +41,7 @@ impl RssController {
             match self
                 .load_feed(
                     &self
-                        .get_file_name(self.feed_urls.get(index).unwrap())
+                        .get_feed_file_name(self.feed_urls.get(index).unwrap())
                         .as_str(),
                 )
                 .await
@@ -55,7 +55,7 @@ impl RssController {
                 Err(_) => match self
                     .load_feed(
                         &self
-                            .get_file_name(self.feed_urls.get(index).unwrap())
+                            .get_feed_file_name(self.feed_urls.get(index).unwrap())
                             .as_str(),
                     )
                     .await
@@ -67,7 +67,7 @@ impl RssController {
         }
     }
 
-    fn get_file_name(&self, url: &str) -> String {
+    fn get_feed_file_name(&self, url: &str) -> String {
         let regex = Regex::new(r"\/\/(.*\..*)\/").unwrap();
         regex
             .captures(url)
@@ -80,7 +80,7 @@ impl RssController {
             .replace("/", "")
             + ".xml"
     }
-    fn get_file_name(&self, url: &str) -> String {
+    fn get_item_file_name(&self, url: &str) -> String {
         
         let regex = Regex::new(r"//.*\..*/(.*)").unwrap();
         let reg = regex
@@ -103,7 +103,7 @@ impl RssController {
         let channel = Channel::read_from(&content[..])?;
         let channel = self.download_content(channel).await.unwrap();
 
-        let mut file = File::create(self.get_file_name(url)).expect("Unable to create file");
+        let mut file = File::create(self.get_feed_file_name(url)).expect("Unable to create file");
         file.write(&content)?;
 
         Ok(channel)
@@ -127,7 +127,7 @@ impl RssController {
 
                 
                 // Create a file to save the content
-                let file_name = self.get_file_name(url);
+                let file_name = self.get_item_file_name(url);
                 
                 let file_path = dir.join(&file_name);
                 if file_path.exists() {
@@ -153,7 +153,7 @@ impl RssController {
             
 
         // Create a file to save the content
-        let file_name = self.get_file_name(&url);
+        let file_name = self.get_item_file_name(&url);
                 
         let file_path = dir.join(&file_name);
         if file_path.exists() {
