@@ -80,8 +80,8 @@ impl RssController {
             .replace("/", "")
             + ".xml"
     }
-    fn get_image_name(&self, url: &str) -> String {
-        // println!("{}",url);
+    fn get_file_name(&self, url: &str) -> String {
+        
         let regex = Regex::new(r"//.*\..*/(.*)").unwrap();
         let reg = regex
             .captures(url)
@@ -91,7 +91,7 @@ impl RssController {
             .as_str()
             .to_string()
             .replace("/", "");
-        println!("{}", reg);
+        
         reg
     }
 
@@ -108,7 +108,7 @@ impl RssController {
 
         Ok(channel)
     }
-    async fn download_item(&self, item: &mut Item, dir: PathBuf) -> Result<(), Box<dyn Error>> {
+    async fn download_item_images(&self, item: &mut Item, dir: PathBuf) -> Result<(), Box<dyn Error>> {
         let regex = Regex::new(r#"<img[^>]+src="([^">]+)""#)?;
 
         // Ensure item.content is a String
@@ -125,16 +125,49 @@ impl RssController {
             if let Some(url) = capture.get(1) {
                 let url = url.as_str();
 
-                // Download the content
-                let content = reqwest::get(url).await?.bytes().await?;
-
+                
                 // Create a file to save the content
-                let file_name = self.get_image_name(url);
+                let file_name = self.get_file_name(url);
+                
                 let file_path = dir.join(&file_name);
+                if file_path.exists() {
+                    println!("[!] File with same name in feed already exists")
+                }
+                else {
+                    // Download the content
+                let content = reqwest::get(url).await?.bytes().await?;
                 let mut file = File::create(&file_path)?;
                 file.write_all(&content)?;
+
+                }
+                
             }
         }
+        Ok(())
+    }
+    async fn download_item_encsoure(&self, item: &mut Item, dir: PathBuf) -> Result<(), Box<dyn Error>> {
+        let url = match item.clone().enclosure {
+            Some(closure) => closure.url,
+            None => return Err("[!] no cosure".into()),
+        };
+            
+
+        // Create a file to save the content
+        let file_name = self.get_file_name(&url);
+                
+        let file_path = dir.join(&file_name);
+        if file_path.exists() {
+            println!("[!] File with same name in feed already exists")
+        }
+        else {
+            // Download the content
+            let content = reqwest::get(url).await?.bytes().await?;
+            let mut file = File::create(&file_path)?;
+                file.write_all(&content)?;
+
+        }
+        
+        
         Ok(())
     }
 
@@ -144,7 +177,8 @@ impl RssController {
         create_dir(&channel_dir).is_err();
 
         for item in &mut channel.items {
-            self.download_item(item, channel_dir.clone()).await;
+            self.download_item_images(item, channel_dir.clone()).await;
+            self.download_item_encsoure(item, channel_dir.clone()).await;
         }
 
         Ok(channel) // Return the channel after processing
