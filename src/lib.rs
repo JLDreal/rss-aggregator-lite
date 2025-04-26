@@ -81,7 +81,7 @@ impl RssController {
             + ".xml"
     }
     fn get_item_file_name(&self, url: &str) -> String {
-        
+
         let regex = Regex::new(r"//.*\..*/(.*)").unwrap();
         let reg = regex
             .captures(url)
@@ -91,7 +91,7 @@ impl RssController {
             .as_str()
             .to_string()
             .replace("/", "");
-        
+
         reg
     }
 
@@ -125,10 +125,10 @@ impl RssController {
             if let Some(url) = capture.get(1) {
                 let url = url.as_str();
 
-                
+
                 // Create a file to save the content
                 let file_name = self.get_item_file_name(url);
-                
+
                 let file_path = dir.join(&file_name);
                 if file_path.exists() {
                     println!("[!] File with same name in feed already exists")
@@ -140,7 +140,7 @@ impl RssController {
                 file.write_all(&content)?;
 
                 }
-                
+
             }
         }
         Ok(())
@@ -150,11 +150,11 @@ impl RssController {
             Some(closure) => closure.url,
             None => return Err("[!] no cosure".into()),
         };
-            
+
 
         // Create a file to save the content
         let file_name = self.get_item_file_name(&url);
-                
+
         let file_path = dir.join(&file_name);
         if file_path.exists() {
             println!("[!] File with same name in feed already exists")
@@ -163,11 +163,12 @@ impl RssController {
             // Download the content
             let content = reqwest::get(url).await?.bytes().await?;
             let mut file = File::create(&file_path)?;
-                file.write_all(&content)?;
+            file.write_all(&content)?;
+
 
         }
-        
-        
+
+
         Ok(())
     }
 
