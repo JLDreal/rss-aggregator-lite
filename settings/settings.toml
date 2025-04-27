@@ -1,8 +1,12 @@
 
 
 [settings]
-is_offline = true
+is_offline = false
 download_behavior = "all"
 
 [feed]
-feeds = ["https://lobste.rs/rss","https://www.volksverpetzer.de/rss","https://doingfedtime.com/rss", "https://2.5admins.com/feed/podcast"]
+feeds = [
+    "https://www.volksverpetzer.de/rss",
+    "https://doingfedtime.com/rss",
+    "https://2.5admins.com/feed/podcast",
+]

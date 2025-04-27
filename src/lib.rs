@@ -4,7 +4,9 @@ use serde_derive::Deserialize;
 use std::fs::{self, File, create_dir};
 use std::iter;
 use std::path::{Path, PathBuf};
+use std::ptr::replace;
 use std::{error::Error, io::BufReader, io::Write};
+use tokio::fs::create_dir_all;
 use toml;
 
 pub struct RssController {
@@ -71,7 +73,7 @@ impl RssController {
         let regex = Regex::new(r"\/\/(.*\..*)\/").unwrap();
         regex
             .captures(url)
-            .expect("file wrong idk.")
+            .expect("[!] file wrong idk.")
             .get(1)
             .unwrap()
             .as_str()
@@ -81,7 +83,6 @@ impl RssController {
             + ".xml"
     }
     fn get_item_file_name(&self, url: &str) -> String {
-
         let regex = Regex::new(r"//.*\..*/(.*)").unwrap();
         let reg = regex
             .captures(url)
@@ -101,14 +102,18 @@ impl RssController {
             .bytes()
             .await?;
         let channel = Channel::read_from(&content[..])?;
-        let channel = self.download_content(channel).await.unwrap();
+        let channel = self.download_content(channel, Some(2)).await.unwrap();
 
         let mut file = File::create(self.get_feed_file_name(url)).expect("Unable to create file");
-        file.write(&content)?;
+        channel.write_to(file);
 
         Ok(channel)
     }
-    async fn download_item_images(&self, item: &mut Item, dir: PathBuf) -> Result<(), Box<dyn Error>> {
+    async fn download_item_images(
+        &self,
+        item: &mut Item,
+        dir: PathBuf,
+    ) -> Result<(), Box<dyn Error>> {
         let regex = Regex::new(r#"<img[^>]+src="([^">]+)""#)?;
 
         // Ensure item.content is a String
@@ -119,12 +124,12 @@ impl RssController {
 
         // Find all captures in the item content
         let images = regex.captures_iter(content).collect::<Vec<_>>();
+        let mut content_clone = content.clone();
 
         for capture in images {
             // Get the URL from the capture group
             if let Some(url) = capture.get(1) {
                 let url = url.as_str();
-
 
                 // Create a file to save the content
                 let file_name = self.get_item_file_name(url);
@@ -132,25 +137,32 @@ impl RssController {
                 let file_path = dir.join(&file_name);
                 if file_path.exists() {
                     println!("[!] File with same name in feed already exists")
-                }
-                else {
+                } else {
                     // Download the content
-                let content = reqwest::get(url).await?.bytes().await?;
-                let mut file = File::create(&file_path)?;
-                file.write_all(&content)?;
-
+                    let data = reqwest::get(url).await?.bytes().await?;
+                    let mut file = File::create(&file_path)?;
+                    file.write_all(&data)?;
+                    content_clone = content_clone.replace(
+                        url,
+                        file_path
+                            .to_str()
+                            .expect("[!] created file does not have name"),
+                    );
                 }
-
             }
         }
+        *content = content_clone;
         Ok(())
     }
-    async fn download_item_encsoure(&self, item: &mut Item, dir: PathBuf) -> Result<(), Box<dyn Error>> {
+    async fn download_item_encsoure(
+        &self,
+        item: &mut Item,
+        dir: PathBuf,
+    ) -> Result<(), Box<dyn Error>> {
         let url = match item.clone().enclosure {
             Some(closure) => closure.url,
             None => return Err("[!] no cosure".into()),
         };
-
 
         // Create a file to save the content
         let file_name = self.get_item_file_name(&url);
@@ -158,29 +170,45 @@ impl RssController {
         let file_path = dir.join(&file_name);
         if file_path.exists() {
             println!("[!] File with same name in feed already exists")
-        }
-        else {
+        } else {
             // Download the content
-            let content = reqwest::get(url).await?.bytes().await?;
+            let data = reqwest::get(url).await?.bytes().await?;
             let mut file = File::create(&file_path)?;
-            file.write_all(&content)?;
-
-
+            file.write_all(&data)?;
+            item.enclosure.as_mut().unwrap().url = file_path.to_str().unwrap().to_string();
         }
-
 
         Ok(())
     }
 
-    async fn download_content(&self, mut channel: Channel) -> Result<Channel, Box<dyn Error>> {
+    async fn download_content(
+        &self,
+        mut channel: Channel,
+        item_cap: Option<u16>,
+    ) -> Result<Channel, Box<dyn Error>> {
         // Create a directory for the channel
-        let channel_dir = PathBuf::from(&channel.title);
-        create_dir(&channel_dir).is_err();
+        let channel_dir = PathBuf::from(format!(r"podcasts/{}", &channel.title.replace(" ", "_")));
+        let _ = create_dir_all(&channel_dir).await.is_err();
 
-        for item in &mut channel.items {
-            self.download_item_images(item, channel_dir.clone()).await;
-            self.download_item_encsoure(item, channel_dir.clone()).await;
+        let channel_copy = channel.clone();
+
+        match item_cap {
+            Some(cap) => {
+                for i in 0..cap {
+                    let item = &mut channel.items[i as usize];
+                    self.download_item_images(item, channel_dir.clone()).await;
+                    self.download_item_encsoure(item, channel_dir.clone()).await;
+                }
+            }
+            None => {
+                for item in &mut channel.items {
+                    self.download_item_images(item, channel_dir.clone()).await;
+                    self.download_item_encsoure(item, channel_dir.clone()).await;
+                }
+            }
         }
+
+        assert_ne!(channel, channel_copy);
 
         Ok(channel) // Return the channel after processing
     }
