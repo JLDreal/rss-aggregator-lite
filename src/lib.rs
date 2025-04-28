@@ -1,6 +1,7 @@
 use regex::Regex;
 use rss::{Channel, Item};
 use serde_derive::Deserialize;
+use std::fmt::format;
 use std::fs::{self, File, create_dir};
 use std::iter;
 use std::path::{Path, PathBuf};
@@ -104,7 +105,8 @@ impl RssController {
         let channel = Channel::read_from(&content[..])?;
         let channel = self.download_content(channel, Some(2)).await.unwrap();
 
-        let mut file = File::create(self.get_feed_file_name(url)).expect("Unable to create file");
+        let mut file = File::create(format!("feeds/{}", self.get_feed_file_name(url)))
+            .expect("Unable to create file");
         channel.write_to(file);
 
         Ok(channel)
@@ -188,6 +190,9 @@ impl RssController {
     ) -> Result<Channel, Box<dyn Error>> {
         // Create a directory for the channel
         let channel_dir = PathBuf::from(format!(r"podcasts/{}", &channel.title.replace(" ", "_")));
+        let feed_dir = PathBuf::from("feeds/");
+
+        let _ = create_dir_all(&feed_dir).await.is_err();
         let _ = create_dir_all(&channel_dir).await.is_err();
 
         let channel_copy = channel.clone();
@@ -208,13 +213,11 @@ impl RssController {
             }
         }
 
-        assert_ne!(channel, channel_copy);
-
         Ok(channel) // Return the channel after processing
     }
 
     async fn load_feed(&self, filename: &str) -> Result<Channel, Box<dyn Error>> {
-        let file = File::open(filename)?;
+        let file = File::open(format!(r"feeds/{}", filename))?;
         let channel = Channel::read_from(BufReader::new(file))?;
         Ok(channel)
     }
@@ -234,7 +237,7 @@ impl RssController {
 #[derive(Deserialize)]
 struct Settings {
     is_offline: bool,
-    download_behavior: String,
+    cache_amm: usize,
 }
 
 #[derive(Deserialize)]
@@ -259,7 +262,7 @@ impl SettingsController {
             rss_controller: RssController::new(),
             settings: Settings {
                 is_offline: false,
-                download_behavior: "".to_string(),
+                cache_amm: 5,
             },
         }
     }

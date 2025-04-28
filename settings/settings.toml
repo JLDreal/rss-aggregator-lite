@@ -2,10 +2,11 @@
 
 [settings]
 is_offline = false
-download_behavior = "all"
+cache_amm = 10
 
 [feed]
 feeds = [
+    "https://lobste.rs/rss",
     "https://www.volksverpetzer.de/rss",
     "https://doingfedtime.com/rss",
     "https://2.5admins.com/feed/podcast",
