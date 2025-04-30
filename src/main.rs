@@ -7,13 +7,13 @@ async fn main() {
     settings.load().await.unwrap();
     settings
         .rss_controller
-        .channels
+        .items
         .iter()
-        .for_each(|x| println!("title: {}", x.title));
+        .for_each(|x| println!("title: {:?}", x.title));
     let feed = settings
         .rss_controller
-        .channels
+        .items
         .iter()
-        .find(|x| x.title == "2.5 Admins")
+        .find(|x| x.title. == "2.5 Admins")
         .unwrap();
 }

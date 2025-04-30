@@ -5,14 +5,10 @@ CREATE TABLE items (
   author NVARCHAR,
   pub_date NVARCHAR,
   content TEXT,
-  enclosure_id int,
+  enclosure_id INTEGER,
 
-  --categories for later
-
-
-  -- enclosure
-  FOREIGN KEY(enclosure_id) REFERENCES enclosures(id),
 
   link NVARCHAR,
-  source_url NVARCHAR
-)
+  source_url NVARCHAR,
+  FOREIGN KEY(enclosure_id) REFERENCES enclosures(id)
+);

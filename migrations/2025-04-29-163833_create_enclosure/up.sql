@@ -1,7 +1,7 @@
 -- Your SQL goes here
 CREATE TABLE enclosures (
-    id INT,
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     url NVARCHAR,
-    length NVARCHAR,
+    len NVARCHAR,
     mime_type NVARCHAR
 )

@@ -1,17 +1,21 @@
+use std::error::Error;
+use std::f32::NAN;
+use std::{
+    fs::{self, File, create_dir_all},
+    io::Write,
+    path::PathBuf,
+};
+pub mod models;
+pub mod schema;
+use models::*;
 use regex::Regex;
-use rss::{Channel, Item};
+use rss::Channel;
 use serde_derive::Deserialize;
-use std::fmt::format;
-use std::fs::{self, File, create_dir};
-use std::iter;
-use std::path::{Path, PathBuf};
-use std::ptr::replace;
-use std::{error::Error, io::BufReader, io::Write};
-use tokio::fs::create_dir_all;
+
 use toml;
 
 pub struct RssController {
-    pub channels: Vec<Channel>,
+    pub items: Vec<Item>,
     pub feed_urls: Vec<String>,
     pub online: bool,
 }
@@ -19,7 +23,7 @@ pub struct RssController {
 impl RssController {
     pub fn new() -> Self {
         Self {
-            channels: Vec::new(),
+            items: Vec::new(),
             feed_urls: Vec::new(),
             online: false,
         }
@@ -32,7 +36,7 @@ impl RssController {
     }
 
     pub async fn get_feeds(&mut self) {
-        self.channels = Vec::new();
+        self.items = Vec::new();
         for i in 0..self.feed_urls.len() {
             self.get_feed(i).await;
         }
@@ -41,48 +45,27 @@ impl RssController {
     pub async fn get_feed(&mut self, index: usize) {
         let mut tmp_channels: Vec<Channel> = Vec::new();
         if self.online {
-            match self
-                .load_feed(
-                    &self
-                        .get_feed_file_name(self.feed_urls.get(index).unwrap())
-                        .as_str(),
-                )
-                .await
-            {
-                Ok(res) => self.channels.push(res),
+            match self.load_feed(&self.feed_urls.get(index).unwrap()).await {
+                Ok(res) => {
+                    todo!("[!] load local items")
+                }
                 Err(_) => println!("[!] No local version."),
             };
         } else {
             match self.download_feed(self.feed_urls.get(index).unwrap()).await {
-                Ok(res) => self.channels.push(res),
-                Err(_) => match self
-                    .load_feed(
-                        &self
-                            .get_feed_file_name(self.feed_urls.get(index).unwrap())
-                            .as_str(),
-                    )
-                    .await
-                {
-                    Ok(res) => tmp_channels.push(res),
+                Ok(res) => {
+                    todo!("[!] download items");
+                }
+                Err(_) => match self.load_feed(&self.feed_urls.get(index).unwrap()).await {
+                    Ok(res) => {
+                        todo!("[!] load local items")
+                    }
                     Err(_) => println!("[!] No internet and no local version."),
                 },
             };
         }
     }
 
-    fn get_feed_file_name(&self, url: &str) -> String {
-        let regex = Regex::new(r"\/\/(.*\..*)\/").unwrap();
-        regex
-            .captures(url)
-            .expect("[!] file wrong idk.")
-            .get(1)
-            .unwrap()
-            .as_str()
-            .to_string()
-            .replace(".", "_")
-            .replace("/", "")
-            + ".xml"
-    }
     fn get_item_file_name(&self, url: &str) -> String {
         let regex = Regex::new(r"//.*\..*/(.*)").unwrap();
         let reg = regex
@@ -105,15 +88,11 @@ impl RssController {
         let channel = Channel::read_from(&content[..])?;
         let channel = self.download_content(channel, Some(2)).await.unwrap();
 
-        let mut file = File::create(format!("feeds/{}", self.get_feed_file_name(url)))
-            .expect("Unable to create file");
-        channel.write_to(file);
-
         Ok(channel)
     }
     async fn download_item_images(
         &self,
-        item: &mut Item,
+        item: &mut models::Item,
         dir: PathBuf,
     ) -> Result<(), Box<dyn Error>> {
         let regex = Regex::new(r#"<img[^>]+src="([^">]+)""#)?;
@@ -158,13 +137,16 @@ impl RssController {
     }
     async fn download_item_encsoure(
         &self,
-        item: &mut Item,
+        item: &mut models::Item,
         dir: PathBuf,
     ) -> Result<(), Box<dyn Error>> {
-        let url = match item.clone().enclosure {
-            Some(closure) => closure.url,
-            None => return Err("[!] no cosure".into()),
-        };
+        //
+        todo!("[!] get inclosure");
+        let url = "tet";
+        // let url = match item.clone().enclosure {
+        //    Some(closure) => closure.url,
+        //    None => return Err("[!] no cosure".into()),
+        //};
 
         // Create a file to save the content
         let file_name = self.get_item_file_name(&url);
@@ -177,7 +159,8 @@ impl RssController {
             let data = reqwest::get(url).await?.bytes().await?;
             let mut file = File::create(&file_path)?;
             file.write_all(&data)?;
-            item.enclosure.as_mut().unwrap().url = file_path.to_str().unwrap().to_string();
+            // item.enclosure.as_mut().unwrap().url = file_path.to_str().unwrap().to_string();
+            todo!("[!] enclosure change")
         }
 
         Ok(())
@@ -192,45 +175,91 @@ impl RssController {
         let channel_dir = PathBuf::from(format!(r"podcasts/{}", &channel.title.replace(" ", "_")));
         let feed_dir = PathBuf::from("feeds/");
 
-        let _ = create_dir_all(&feed_dir).await.is_err();
-        let _ = create_dir_all(&channel_dir).await.is_err();
+        let _ = create_dir_all(&feed_dir).is_err();
+        let _ = create_dir_all(&channel_dir).is_err();
 
         let channel_copy = channel.clone();
-
+        // convert
+        todo("[!] items from db");
         match item_cap {
             Some(cap) => {
                 for i in 0..cap {
                     let item = &mut channel.items[i as usize];
-                    self.download_item_images(item, channel_dir.clone()).await;
-                    self.download_item_encsoure(item, channel_dir.clone()).await;
+                    // self.download_item_images(item, channel_dir.clone()).await;
+                    // self.download_item_encsoure(item, channel_dir.clone()).await;
                 }
             }
             None => {
                 for item in &mut channel.items {
-                    self.download_item_images(item, channel_dir.clone()).await;
-                    self.download_item_encsoure(item, channel_dir.clone()).await;
+                    // self.download_item_images(item, channel_dir.clone()).await;
+                    // self.download_item_encsoure(item, channel_dir.clone()).await;
                 }
             }
         }
+        // save item to db
+        todo!("[!] save item");
 
         Ok(channel) // Return the channel after processing
     }
 
-    async fn load_feed(&self, filename: &str) -> Result<Channel, Box<dyn Error>> {
-        let file = File::open(format!(r"feeds/{}", filename))?;
-        let channel = Channel::read_from(BufReader::new(file))?;
+    async fn create_feed(&self, feed_name: &str) -> Result<Channel, Box<dyn Error>> {
+        let mut channel = Channel::default();
+        //
+        todo!("[!] download feed insert items");
         Ok(channel)
     }
+    async fn create_item(&self, item: rss::Item) -> Result<Item, Box<dyn Error>> {
+        //
+        let enclosure = new NewEnclosure{
+            len: &item.enclosure.unwrap().length(),
+            mime_type: item.enclosure.unwrap().mime_type(),
+            url: item.enclosure.unwrap().url(),
+        } ;
+        diesel::insert_into(posts::table)
+                .values(&enclosure)
+                .returning(Post::as_returning())
+                .get_result(conn)
+                .expect("Error saving new enclosure");
 
-    pub fn remove_feed(&mut self, url: &str) {
-        if let Some(index) = self.feed_urls.iter().position(|x| x == url) {
-            self.channels.remove(index);
-            self.feed_urls.remove(index);
+        todo!("[!] load item");
+        let item = new NewItem {
+            author: item.author,
+            title: item.author,
+            pub_date: item.pub_date,
+            content: item.content,
+            enclosure_id : enclosure
         }
+        Ok(item)
     }
 
-    pub fn get_channels(&self) -> Vec<&Channel> {
-        self.channels.iter().collect()
+
+    async fn load_feed(&self, feed_name: &str) -> Result<Channel, Box<dyn Error>> {
+        let mut channel = Channel::default();
+        //
+        todo!("[!] load feed");
+        Ok(channel)
+    }
+    async fn load_item(&self, item_id: usize) -> Result<Item, Box<dyn Error>> {
+        let item: models::Item = Item {
+            id: 1,
+            title: "test".to_owned(),
+            author: None,
+            pub_date: None,
+            content: None,
+            enclosure_id: None,
+        };
+        todo!("[!] load item");
+        Ok(item)
+    }
+
+    async fn delete_item(&self, item_id: usize) -> Result<(), Box<dyn Error>> {
+        todo!("[!] delete item");
+        Ok(())
+    }
+
+    async fn delete_feed(&self, feed_name: &str) -> Result<(), Box<dyn Error>> {
+        todo!("[!] delete feed");
+        Ok(())
     }
 }
 
