@@ -25,6 +25,7 @@
             rustup
             pkg-config
             sqlite
+            diesel-cli
           ];
 
           RUSTC_VERSION = overrides.toolchain.channel;
