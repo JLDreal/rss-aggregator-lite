@@ -10,10 +10,4 @@ async fn main() {
         .items
         .iter()
         .for_each(|x| println!("title: {:?}", x.title));
-    let feed = settings
-        .rss_controller
-        .items
-        .iter()
-        .find(|x| x.title. == "2.5 Admins")
-        .unwrap();
 }

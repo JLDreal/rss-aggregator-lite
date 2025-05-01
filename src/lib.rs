@@ -7,17 +7,22 @@ use std::{
 };
 pub mod models;
 pub mod schema;
+use diesel::RunQueryDsl;
+use diesel::SelectableHelper;
+use diesel::{Connection, SqliteConnection};
 use models::*;
 use regex::Regex;
 use rss::Channel;
+use schema::*;
 use serde_derive::Deserialize;
 
 use toml;
 
 pub struct RssController {
-    pub items: Vec<Item>,
+    pub items: Vec<models::Item>,
     pub feed_urls: Vec<String>,
     pub online: bool,
+    conn: SqliteConnection,
 }
 
 impl RssController {
@@ -26,6 +31,7 @@ impl RssController {
             items: Vec::new(),
             feed_urls: Vec::new(),
             online: false,
+            conn: models::establish_connection(),
         }
     }
 
@@ -180,7 +186,7 @@ impl RssController {
 
         let channel_copy = channel.clone();
         // convert
-        todo("[!] items from db");
+        todo!("[!] items from db");
         match item_cap {
             Some(cap) => {
                 for i in 0..cap {
@@ -208,30 +214,48 @@ impl RssController {
         todo!("[!] download feed insert items");
         Ok(channel)
     }
-    async fn create_item(&self, item: rss::Item) -> Result<Item, Box<dyn Error>> {
+    async fn create_item(&mut self, item: rss::Item) -> Result<Item, Box<dyn Error>> {
         //
-        let enclosure = new NewEnclosure{
-            len: &item.enclosure.unwrap().length(),
-            mime_type: item.enclosure.unwrap().mime_type(),
-            url: item.enclosure.unwrap().url(),
-        } ;
-        diesel::insert_into(posts::table)
-                .values(&enclosure)
-                .returning(Post::as_returning())
-                .get_result(conn)
-                .expect("Error saving new enclosure");
+        let enclosure = NewEnclosure {
+            len: &item.enclosure.as_ref().unwrap().length(),
+            mime_type: item.enclosure.as_ref().unwrap().mime_type(),
+            url: item.enclosure.as_ref().unwrap().url(),
+        };
+        let enclosure = diesel::insert_into(enclosures::table)
+            .values(&enclosure)
+            .returning(Enclosure::as_returning())
+            .get_result(&mut self.conn)
+            .expect("Error saving new enclosure");
 
-        todo!("[!] load item");
-        let item = new NewItem {
-            author: item.author,
-            title: item.author,
-            pub_date: item.pub_date,
-            content: item.content,
-            enclosure_id : enclosure
-        }
+        let mut categories: Vec<Category> = Vec::new();
+        item.categories().iter().for_each(|x| {
+            let category = NewCategory {
+                name: &x.name,
+                domain: &x.domain().unwrap(),
+            };
+            let category = diesel::insert_into(categories::table)
+                .values(&category)
+                .returning(Category::as_returning())
+                .get_result(&mut self.conn)
+                .expect("Error saving new enclosure");
+            categories.push(category);
+        });
+
+        let item = NewItem {
+            author: &item.author().unwrap(),
+            title: &item.title().unwrap(),
+            pub_date: &item.pub_date().unwrap(),
+            content: &item.content().unwrap(),
+            enclosure_id: &enclosure.id,
+        };
+
+        let item = diesel::insert_into(items::table)
+            .values(&item)
+            .returning(Item::as_returning())
+            .get_result(&mut self.conn)
+            .expect("Error saving new enclosure");
         Ok(item)
     }
-
 
     async fn load_feed(&self, feed_name: &str) -> Result<Channel, Box<dyn Error>> {
         let mut channel = Channel::default();

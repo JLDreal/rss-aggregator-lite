@@ -1,7 +1,16 @@
 use diesel::prelude::*;
-use rss::EnclosureBuilder;
 
 use crate::schema::categories;
+use dotenvy::dotenv;
+use std::env;
+
+pub fn establish_connection() -> SqliteConnection {
+    dotenv().ok();
+
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    SqliteConnection::establish(&database_url)
+        .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
+}
 
 #[derive(PartialEq, Clone, Queryable, Selectable)]
 #[diesel(table_name = crate::schema::categories)]
@@ -30,7 +39,7 @@ pub struct Enclosure {
 }
 
 #[derive(Insertable)]
-#[diesel(table_name = enclosures)]
+#[diesel(table_name = crate::schema::enclosures)]
 pub struct NewEnclosure<'a> {
     pub url: &'a str,
     pub len: &'a str,
@@ -50,11 +59,11 @@ pub struct Item {
 }
 
 #[derive(Insertable)]
-#[diesel(table_name = items)]
+#[diesel(table_name = crate::schema::items)]
 pub struct NewItem<'a> {
     pub title: &'a str,
     pub author: &'a str,
     pub pub_date: &'a str,
     pub content: &'a str,
-    pub enclosure_id: &'a str,
+    pub enclosure_id: &'a i32,
 }
