@@ -41,9 +41,4 @@ diesel::joinable!(item_category -> categories (category_id));
 diesel::joinable!(item_category -> items (item_id));
 diesel::joinable!(items -> enclosures (enclosure_id));
 
-diesel::allow_tables_to_appear_in_same_query!(
-    categories,
-    enclosures,
-    item_category,
-    items,
-);
+diesel::allow_tables_to_appear_in_same_query!(categories, enclosures, item_category, items,);

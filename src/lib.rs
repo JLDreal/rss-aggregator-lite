@@ -5,11 +5,15 @@ use std::{
     io::Write,
     path::PathBuf,
 };
+pub mod db;
 pub mod models;
 pub mod schema;
-use diesel::RunQueryDsl;
+use db::establish_connection;
 use diesel::SelectableHelper;
 use diesel::{Connection, SqliteConnection};
+use diesel::{Insertable, RunQueryDsl};
+use enclosure::*;
+use enclosures::table;
 use models::*;
 use regex::Regex;
 use rss::Channel;
@@ -17,6 +21,19 @@ use schema::*;
 use serde_derive::Deserialize;
 
 use toml;
+
+pub trait RssOperations {
+    fn add_feed(&mut self, url: String);
+    async fn get_feeds(&mut self);
+    async fn get_feed(&mut self, index: usize);
+    async fn download_feed(&self, url: &str) -> Result<Channel, Box<dyn Error>>;
+    async fn load_feed(&self, feed_name: &str) -> Result<Channel, Box<dyn Error>>;
+    async fn create_feed(&self, feed_name: &str) -> Result<Channel, Box<dyn Error>>;
+    async fn delete_feed(&self, feed_name: &str) -> Result<(), Box<dyn Error>>;
+    async fn create_item(&mut self, item: rss::Item) -> Result<Item, Box<dyn Error>>;
+    async fn load_item(&self, item_id: usize) -> Result<Item, Box<dyn Error>>;
+    async fn delete_item(&self, item_id: usize) -> Result<(), Box<dyn Error>>;
+}
 
 pub struct RssController {
     pub items: Vec<models::Item>,
@@ -31,44 +48,7 @@ impl RssController {
             items: Vec::new(),
             feed_urls: Vec::new(),
             online: false,
-            conn: models::establish_connection(),
-        }
-    }
-
-    pub fn add_feed(&mut self, url: String) {
-        if !self.feed_urls.contains(&url) {
-            self.feed_urls.push(url);
-        }
-    }
-
-    pub async fn get_feeds(&mut self) {
-        self.items = Vec::new();
-        for i in 0..self.feed_urls.len() {
-            self.get_feed(i).await;
-        }
-    }
-
-    pub async fn get_feed(&mut self, index: usize) {
-        let mut tmp_channels: Vec<Channel> = Vec::new();
-        if self.online {
-            match self.load_feed(&self.feed_urls.get(index).unwrap()).await {
-                Ok(res) => {
-                    todo!("[!] load local items")
-                }
-                Err(_) => println!("[!] No local version."),
-            };
-        } else {
-            match self.download_feed(self.feed_urls.get(index).unwrap()).await {
-                Ok(res) => {
-                    todo!("[!] download items");
-                }
-                Err(_) => match self.load_feed(&self.feed_urls.get(index).unwrap()).await {
-                    Ok(res) => {
-                        todo!("[!] load local items")
-                    }
-                    Err(_) => println!("[!] No internet and no local version."),
-                },
-            };
+            conn: db::establish_connection(),
         }
     }
 
@@ -86,90 +66,20 @@ impl RssController {
         reg
     }
 
-    async fn download_feed(&self, url: &str) -> Result<Channel, Box<dyn Error>> {
-        let content = reqwest::get(url) //
-            .await?
-            .bytes()
-            .await?;
-        let channel = Channel::read_from(&content[..])?;
-        let channel = self.download_content(channel, Some(2)).await.unwrap();
-
-        Ok(channel)
-    }
     async fn download_item_images(
         &self,
         item: &mut models::Item,
         dir: PathBuf,
     ) -> Result<(), Box<dyn Error>> {
-        let regex = Regex::new(r#"<img[^>]+src="([^">]+)""#)?;
-
-        // Ensure item.content is a String
-        let content = match item.content.as_mut() {
-            Some(res) => res,
-            None => return Err("[!] no title for feed.".into()),
-        };
-
-        // Find all captures in the item content
-        let images = regex.captures_iter(content).collect::<Vec<_>>();
-        let mut content_clone = content.clone();
-
-        for capture in images {
-            // Get the URL from the capture group
-            if let Some(url) = capture.get(1) {
-                let url = url.as_str();
-
-                // Create a file to save the content
-                let file_name = self.get_item_file_name(url);
-
-                let file_path = dir.join(&file_name);
-                if file_path.exists() {
-                    println!("[!] File with same name in feed already exists")
-                } else {
-                    // Download the content
-                    let data = reqwest::get(url).await?.bytes().await?;
-                    let mut file = File::create(&file_path)?;
-                    file.write_all(&data)?;
-                    content_clone = content_clone.replace(
-                        url,
-                        file_path
-                            .to_str()
-                            .expect("[!] created file does not have name"),
-                    );
-                }
-            }
-        }
-        *content = content_clone;
-        Ok(())
+        todo!("Implement image downloading logic for items");
     }
-    async fn download_item_encsoure(
+
+    async fn download_item_enclosure(
         &self,
         item: &mut models::Item,
         dir: PathBuf,
     ) -> Result<(), Box<dyn Error>> {
-        //
-        todo!("[!] get inclosure");
-        let url = "tet";
-        // let url = match item.clone().enclosure {
-        //    Some(closure) => closure.url,
-        //    None => return Err("[!] no cosure".into()),
-        //};
-
-        // Create a file to save the content
-        let file_name = self.get_item_file_name(&url);
-
-        let file_path = dir.join(&file_name);
-        if file_path.exists() {
-            println!("[!] File with same name in feed already exists")
-        } else {
-            // Download the content
-            let data = reqwest::get(url).await?.bytes().await?;
-            let mut file = File::create(&file_path)?;
-            file.write_all(&data)?;
-            // item.enclosure.as_mut().unwrap().url = file_path.to_str().unwrap().to_string();
-            todo!("[!] enclosure change")
-        }
-
-        Ok(())
+        todo!("Implement enclosure downloading logic");
     }
 
     async fn download_content(
@@ -177,113 +87,51 @@ impl RssController {
         mut channel: Channel,
         item_cap: Option<u16>,
     ) -> Result<Channel, Box<dyn Error>> {
-        // Create a directory for the channel
-        let channel_dir = PathBuf::from(format!(r"podcasts/{}", &channel.title.replace(" ", "_")));
-        let feed_dir = PathBuf::from("feeds/");
+        todo!("Implement content downloading and processing");
+    }
+}
 
-        let _ = create_dir_all(&feed_dir).is_err();
-        let _ = create_dir_all(&channel_dir).is_err();
-
-        let channel_copy = channel.clone();
-        // convert
-        todo!("[!] items from db");
-        match item_cap {
-            Some(cap) => {
-                for i in 0..cap {
-                    let item = &mut channel.items[i as usize];
-                    // self.download_item_images(item, channel_dir.clone()).await;
-                    // self.download_item_encsoure(item, channel_dir.clone()).await;
-                }
-            }
-            None => {
-                for item in &mut channel.items {
-                    // self.download_item_images(item, channel_dir.clone()).await;
-                    // self.download_item_encsoure(item, channel_dir.clone()).await;
-                }
-            }
+impl RssOperations for RssController {
+    fn add_feed(&mut self, url: String) {
+        if !self.feed_urls.contains(&url) {
+            self.feed_urls.push(url);
         }
-        // save item to db
-        todo!("[!] save item");
-
-        Ok(channel) // Return the channel after processing
     }
 
-    async fn create_feed(&self, feed_name: &str) -> Result<Channel, Box<dyn Error>> {
-        let mut channel = Channel::default();
-        //
-        todo!("[!] download feed insert items");
-        Ok(channel)
+    async fn get_feeds(&mut self) {
+        todo!("Implement fetching all feeds");
     }
-    async fn create_item(&mut self, item: rss::Item) -> Result<Item, Box<dyn Error>> {
-        //
-        let enclosure = NewEnclosure {
-            len: &item.enclosure.as_ref().unwrap().length(),
-            mime_type: item.enclosure.as_ref().unwrap().mime_type(),
-            url: item.enclosure.as_ref().unwrap().url(),
-        };
-        let enclosure = diesel::insert_into(enclosures::table)
-            .values(&enclosure)
-            .returning(Enclosure::as_returning())
-            .get_result(&mut self.conn)
-            .expect("Error saving new enclosure");
 
-        let mut categories: Vec<Category> = Vec::new();
-        item.categories().iter().for_each(|x| {
-            let category = NewCategory {
-                name: &x.name,
-                domain: &x.domain().unwrap(),
-            };
-            let category = diesel::insert_into(categories::table)
-                .values(&category)
-                .returning(Category::as_returning())
-                .get_result(&mut self.conn)
-                .expect("Error saving new enclosure");
-            categories.push(category);
-        });
+    async fn get_feed(&mut self, index: usize) {
+        todo!("Implement fetching single feed by index");
+    }
 
-        let item = NewItem {
-            author: &item.author().unwrap(),
-            title: &item.title().unwrap(),
-            pub_date: &item.pub_date().unwrap(),
-            content: &item.content().unwrap(),
-            enclosure_id: &enclosure.id,
-        };
-
-        let item = diesel::insert_into(items::table)
-            .values(&item)
-            .returning(Item::as_returning())
-            .get_result(&mut self.conn)
-            .expect("Error saving new enclosure");
-        Ok(item)
+    async fn download_feed(&self, url: &str) -> Result<Channel, Box<dyn Error>> {
+        todo!("Implement feed downloading from URL");
     }
 
     async fn load_feed(&self, feed_name: &str) -> Result<Channel, Box<dyn Error>> {
-        let mut channel = Channel::default();
-        //
-        todo!("[!] load feed");
-        Ok(channel)
+        todo!("Implement loading feed from storage");
     }
+
+    async fn create_feed(&self, feed_name: &str) -> Result<Channel, Box<dyn Error>> {
+        todo!("Implement creating new feed");
+    }
+
+    async fn create_item(&mut self, item: rss::Item) -> Result<Item, Box<dyn Error>> {
+        todo!("Implement creating new item");
+    }
+
     async fn load_item(&self, item_id: usize) -> Result<Item, Box<dyn Error>> {
-        let item: models::Item = Item {
-            id: 1,
-            title: "test".to_owned(),
-            author: None,
-            pub_date: None,
-            content: None,
-            enclosure_id: None,
-        };
-        todo!("[!] load item");
-        Ok(item)
+        todo!("Implement loading item by ID");
     }
 
     async fn delete_item(&self, item_id: usize) -> Result<(), Box<dyn Error>> {
-        todo!("[!] delete item");
-        Ok(())
+        todo!("Implement deleting item by ID");
     }
 
     async fn delete_feed(&self, feed_name: &str) -> Result<(), Box<dyn Error>> {
-        todo!("[!] delete feed");
-        Ok(())
+        todo!("Implement deleting feed by name");
     }
 }
 
