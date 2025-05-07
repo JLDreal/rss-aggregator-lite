@@ -1,5 +1,4 @@
 use std::error::Error;
-use std::f32::NAN;
 use std::{
     fs::{self, File, create_dir_all},
     io::Write,
@@ -8,12 +7,10 @@ use std::{
 pub mod db;
 pub mod models;
 pub mod schema;
-use db::establish_connection;
-use diesel::SelectableHelper;
-use diesel::{Connection, SqliteConnection};
-use diesel::{Insertable, RunQueryDsl};
-use enclosure::*;
-use enclosures::table;
+use diesel::{Identifiable, SqliteConnection};
+
+use enclosure::NewEnclosure;
+use enclosures::mime_type;
 use models::*;
 use regex::Regex;
 use rss::Channel;
@@ -119,7 +116,35 @@ impl RssOperations for RssController {
     }
 
     async fn create_item(&mut self, item: rss::Item) -> Result<Item, Box<dyn Error>> {
-        todo!("Implement creating new item");
+        let mut enclosure;
+        let mut categories: Vec<Category>;
+
+        if item.enclosure().is_some() {
+            enclosure = Enclosure::create(
+                &mut self.conn,
+                Some(item.enclosure().unwrap().url()),
+                Some(item.enclosure().unwrap().length()),
+                Some(item.enclosure().unwrap().mime_type()),
+            )
+            .unwrap();
+        };
+        for category in item.categories() {
+            categories.push(
+                Category::create(&mut self.conn, Some(category.name()), Some(category.domain))
+                    .unwrap(),
+            );
+        }
+        Ok(Item::create(
+            &mut self.conn,
+            item.title().unwrap(),
+            item.author(),
+            item.pub_date(),
+            item.content(),
+            Some(enclosure.id()),
+            item.link(),
+            item.link(),
+        )
+        .unwrap())
     }
 
     async fn load_item(&self, item_id: usize) -> Result<Item, Box<dyn Error>> {
