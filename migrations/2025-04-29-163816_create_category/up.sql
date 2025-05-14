@@ -1,5 +1,0 @@
-CREATE TABLE categories (
-    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-    name NVARCHAR,
-    domain NVARCHAR
-)

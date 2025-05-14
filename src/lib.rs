@@ -4,17 +4,10 @@ use std::{
     io::Write,
     path::PathBuf,
 };
-pub mod db;
-pub mod models;
-pub mod schema;
-use diesel::{Identifiable, SqliteConnection};
 
-use enclosure::NewEnclosure;
-use enclosures::mime_type;
-use models::*;
 use regex::Regex;
 use rss::Channel;
-use schema::*;
+use rss::Item;
 use serde_derive::Deserialize;
 
 use toml;
@@ -36,7 +29,6 @@ pub struct RssController {
     pub items: Vec<models::Item>,
     pub feed_urls: Vec<String>,
     pub online: bool,
-    conn: SqliteConnection,
 }
 
 impl RssController {
@@ -45,7 +37,6 @@ impl RssController {
             items: Vec::new(),
             feed_urls: Vec::new(),
             online: false,
-            conn: db::establish_connection(),
         }
     }
 
@@ -116,35 +107,7 @@ impl RssOperations for RssController {
     }
 
     async fn create_item(&mut self, item: rss::Item) -> Result<Item, Box<dyn Error>> {
-        let mut enclosure;
-        let mut categories: Vec<Category>;
-
-        if item.enclosure().is_some() {
-            enclosure = Enclosure::create(
-                &mut self.conn,
-                Some(item.enclosure().unwrap().url()),
-                Some(item.enclosure().unwrap().length()),
-                Some(item.enclosure().unwrap().mime_type()),
-            )
-            .unwrap();
-        };
-        for category in item.categories() {
-            categories.push(
-                Category::create(&mut self.conn, Some(category.name()), Some(category.domain))
-                    .unwrap(),
-            );
-        }
-        Ok(Item::create(
-            &mut self.conn,
-            item.title().unwrap(),
-            item.author(),
-            item.pub_date(),
-            item.content(),
-            Some(enclosure.id()),
-            item.link(),
-            item.link(),
-        )
-        .unwrap())
+        todo!("Implement create new Item");
     }
 
     async fn load_item(&self, item_id: usize) -> Result<Item, Box<dyn Error>> {
