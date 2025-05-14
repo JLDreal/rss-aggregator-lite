@@ -4,3 +4,6 @@
 /podcasts
 /flake.lock
 /database.db
+/migration/README.md
+/migration/target
+/migration/Cargo.lock

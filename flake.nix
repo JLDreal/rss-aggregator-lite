@@ -25,7 +25,8 @@
             rustup
             pkg-config
             sqlite
-            diesel-cli
+            sea-orm-cli
+            openssl
           ];
 
           RUSTC_VERSION = overrides.toolchain.channel;

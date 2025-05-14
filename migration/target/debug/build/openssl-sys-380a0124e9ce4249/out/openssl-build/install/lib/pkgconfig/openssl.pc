@@ -1,0 +1,9 @@
+prefix=/home/dev/projects/rss-aggregator-lite/migration/target/debug/build/openssl-sys-380a0124e9ce4249/out/openssl-build/install
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include 
+
+Name: OpenSSL
+Description: Secure Sockets Layer and cryptography libraries and tools
+Version: 3.5.0
+Requires: libssl libcrypto
