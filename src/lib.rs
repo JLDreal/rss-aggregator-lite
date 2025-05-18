@@ -1,3 +1,16 @@
+mod entities;
+use anyhow::Ok;
+use entities::category::ActiveModel as DbCategory;
+use entities::enclosure::ActiveModel as DbEnclosure;
+use entities::item::ActiveModel as DbItem;
+use entities::*;
+use futures::executor::block_on;
+use regex::Regex;
+use rss::Channel;
+use rss::Item;
+
+use sea_orm::*;
+use serde_derive::Deserialize;
 use std::error::Error;
 use std::{
     fs::{self, File, create_dir_all},
@@ -5,12 +18,8 @@ use std::{
     path::PathBuf,
 };
 
-use regex::Regex;
-use rss::Channel;
-use rss::Item;
-use serde_derive::Deserialize;
-
 use toml;
+const DATABASE_FILE: &str = "sqlite://database.db?mode=rwc";
 
 pub trait RssOperations {
     fn add_feed(&mut self, url: String);
@@ -19,31 +28,31 @@ pub trait RssOperations {
     fn download_feed(
         &self,
         url: &str,
-    ) -> impl std::future::Future<Output = Result<Channel, Box<dyn Error>>> + Send;
+    ) -> impl std::future::Future<Output = Result<Channel, anyhow::Error>> + Send;
     fn load_feed(
         &self,
         feed_name: &str,
-    ) -> impl std::future::Future<Output = Result<Channel, Box<dyn Error>>> + Send;
+    ) -> impl std::future::Future<Output = Result<Channel, anyhow::Error>> + Send;
     fn create_feed(
         &self,
         feed_name: &str,
-    ) -> impl std::future::Future<Output = Result<Channel, Box<dyn Error>>> + Send;
+    ) -> impl std::future::Future<Output = Result<Channel, anyhow::Error>> + Send;
     fn delete_feed(
         &self,
         feed_name: &str,
-    ) -> impl std::future::Future<Output = Result<(), Box<dyn Error>>> + Send;
+    ) -> impl std::future::Future<Output = Result<(), anyhow::Error>> + Send;
     fn create_item(
         &mut self,
         item: rss::Item,
-    ) -> impl std::future::Future<Output = Result<Item, Box<dyn Error>>> + Send;
+    ) -> impl std::future::Future<Output = Result<item::Model, anyhow::Error>> + Send;
     fn load_item(
         &self,
         item_id: usize,
-    ) -> impl std::future::Future<Output = Result<Item, Box<dyn Error>>> + Send;
+    ) -> impl std::future::Future<Output = Result<item::Model, anyhow::Error>> + Send;
     fn delete_item(
         &self,
         item_id: usize,
-    ) -> impl std::future::Future<Output = Result<(), Box<dyn Error>>> + Send;
+    ) -> impl std::future::Future<Output = Result<(), anyhow::Error>> + Send;
 }
 
 pub struct RssController {
@@ -79,7 +88,7 @@ impl RssController {
         &self,
         item: &mut Item,
         dir: PathBuf,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), anyhow::Error> {
         todo!("Implement image downloading logic for items");
     }
 
@@ -87,7 +96,7 @@ impl RssController {
         &self,
         item: &mut Item,
         dir: PathBuf,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), anyhow::Error> {
         todo!("Implement enclosure downloading logic");
     }
 
@@ -95,7 +104,7 @@ impl RssController {
         &self,
         mut channel: Channel,
         item_cap: Option<u16>,
-    ) -> Result<Channel, Box<dyn Error>> {
+    ) -> Result<Channel, anyhow::Error> {
         todo!("Implement content downloading and processing");
     }
 }
@@ -115,31 +124,43 @@ impl RssOperations for RssController {
         todo!("Implement fetching single feed by index");
     }
 
-    async fn download_feed(&self, url: &str) -> Result<Channel, Box<dyn Error>> {
+    async fn download_feed(&self, url: &str) -> Result<Channel, anyhow::Error> {
         todo!("Implement feed downloading from URL");
     }
 
-    async fn load_feed(&self, feed_name: &str) -> Result<Channel, Box<dyn Error>> {
+    async fn load_feed(&self, feed_name: &str) -> Result<Channel, anyhow::Error> {
         todo!("Implement loading feed from storage");
     }
 
-    async fn create_feed(&self, feed_name: &str) -> Result<Channel, Box<dyn Error>> {
+    async fn create_feed(&self, feed_name: &str) -> Result<Channel, anyhow::Error> {
         todo!("Implement creating new feed");
     }
 
-    async fn create_item(&mut self, item: rss::Item) -> Result<Item, Box<dyn Error>> {
-        todo!("Implement create new Item");
+    async fn create_item(&mut self, item: rss::Item) -> Result<item::Model, anyhow::Error> {
+        let db = Database::connect(DATABASE_FILE).await?;
+        let item = DbItem {
+            id: sea_orm::ActiveValue::NotSet,
+            title: ActiveValue::set(item.title().unwrap().to_owned()),
+            author: ActiveValue::set(item.author().unwrap().to_owned()),
+            content: ActiveValue::set(item.content().unwrap().to_owned()),
+            link: ActiveValue::set(item.link().unwrap().to_owned()),
+            description: ActiveValue::set(item.description().unwrap().to_owned()),
+            pub_date: ActiveValue::set(item.pub_date().unwrap().to_owned()),
+            enclosure: ActiveValue::NotSet,
+            categories: ActiveValue::NotSet,
+        };
+        Ok(DbItem::insert(item, &db).await.unwrap())
     }
 
-    async fn load_item(&self, item_id: usize) -> Result<Item, Box<dyn Error>> {
+    async fn load_item(&self, item_id: usize) -> Result<item::Model, anyhow::Error> {
         todo!("Implement loading item by ID");
     }
 
-    async fn delete_item(&self, item_id: usize) -> Result<(), Box<dyn Error>> {
+    async fn delete_item(&self, item_id: usize) -> Result<(), anyhow::Error> {
         todo!("Implement deleting item by ID");
     }
 
-    async fn delete_feed(&self, feed_name: &str) -> Result<(), Box<dyn Error>> {
+    async fn delete_feed(&self, feed_name: &str) -> Result<(), anyhow::Error> {
         todo!("Implement deleting feed by name");
     }
 }
@@ -176,7 +197,7 @@ impl SettingsController {
             },
         }
     }
-    pub async fn load(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn load(&mut self) -> Result<(), anyhow::Error> {
         let content = fs::read_to_string("settings/settings.toml")?;
         let data: Data = toml::from_str(&content)?;
 
